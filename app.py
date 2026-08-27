@@ -4,16 +4,53 @@ import re
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 warnings.filterwarnings("ignore")
 
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 import streamlit as st
 from langchain_chroma import Chroma
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.prompts import PromptTemplate
+from langchain_community.document_loaders import DirectoryLoader, TextLoader, Docx2txtLoader, PyPDFLoader
+from langchain_text_splitters import RecursiveCharacterTextSplitter
+from langchain_community.vectorstores import Chroma
+from langchain_huggingface import HuggingFaceEmbeddings
 # ==============================================================================
 # 🔑 PASTE YOUR GEMINI API KEY HERE
 # ==============================================================================
 MY_GEMINI_KEY = st.secrets["GEMINI_API_KEY"]
 # ==============================================================================
+
+# --- ساخت دیتابیس زنده و هوشمند از روی فایل‌ها ---
+@st.cache_resource
+def load_and_vectorize_docs():
+    all_documents = []
+    
+    # 1. خواندن فایل‌های متنی TXT
+    txt_loader = DirectoryLoader('./docs', glob="**/*.txt", loader_cls=TextLoader, loader_kwargs={'encoding': 'utf-8'})
+    all_documents.extend(txt_loader.load())
+    
+    # 2. خواندن فایل‌های Word (اگر دارید)
+    docx_loader = DirectoryLoader('./docs', glob="**/*.docx", loader_cls=Docx2txtLoader)
+    all_documents.extend(docx_loader.load())
+
+    # 3. خواندن فایل‌های PDF
+    pdf_loader = DirectoryLoader('./docs', glob="**/*.pdf", loader_cls=PyPDFLoader)
+    all_documents.extend(pdf_loader.load())
+
+    # تکه‌تکه کردن متون
+    text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
+    splits = text_splitter.split_documents(all_documents)
+
+    # ساخت دیتابیس در حافظه
+    embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2")
+    vector_store = Chroma.from_documents(documents=splits, embedding=embeddings)
+    
+    return vector_store
+
+# لود کردن دیتابیس
+db = load_and_vectorize_docs()
+
+
 # --- 1. تنظیمات صفحه و استایل کامل RTL و مرتب‌سازی سایدبار ---
 st.set_page_config(page_title="دستیار هوشمند الهادی", page_icon="🤖", layout="centered")
 
