@@ -24,18 +24,31 @@ MY_GEMINI_KEY = st.secrets["GEMINI_API_KEY"]
 @st.cache_resource
 def load_and_vectorize_docs():
     all_documents = []
+    docs_folder = './docs'
     
-    # 1. خواندن فایل‌های متنی TXT
-    txt_loader = DirectoryLoader('./docs', glob="**/*.txt", loader_cls=TextLoader, loader_kwargs={'encoding': 'utf-8'})
-    all_documents.extend(txt_loader.load())
-    
-    # 2. خواندن فایل‌های Word (اگر دارید)
-    docx_loader = DirectoryLoader('./docs', glob="**/*.docx", loader_cls=Docx2txtLoader)
-    all_documents.extend(docx_loader.load())
-
-    # 3. خواندن فایل‌های PDF
-    pdf_loader = DirectoryLoader('./docs', glob="**/*.pdf", loader_cls=PyPDFLoader)
-    all_documents.extend(pdf_loader.load())
+    if os.path.exists(docs_folder):
+        for root, _, files in os.walk(docs_folder):
+            for file in files:
+                file_path = os.path.join(root, file)
+                ext = file.lower().split('.')[-1]
+                
+                try:
+                    if ext == 'txt':
+                        loader = TextLoader(file_path, encoding='utf-8')
+                        all_documents.extend(loader.load())
+                    elif ext in ['docx', 'doc']:
+                        loader = Docx2txtLoader(file_path)
+                        all_documents.extend(loader.load())
+                    elif ext == 'pdf':
+                        loader = PyPDFLoader(file_path)
+                        all_documents.extend(loader.load())
+                except Exception as e:
+                    st.warning(f"خطا در خواندن فایل {file}: {e}")
+                    
+    # اگر هیچ فایلی پیدا نشد
+    if not all_documents:
+        st.error("هیچ متنی از فایل‌های داخل پوشه docs خوانده نشد!")
+        return None
 
     # تکه‌تکه کردن متون
     text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
@@ -46,10 +59,6 @@ def load_and_vectorize_docs():
     vector_store = Chroma.from_documents(documents=splits, embedding=embeddings)
     
     return vector_store
-
-# لود کردن دیتابیس
-db = load_and_vectorize_docs()
-
 
 # --- 1. تنظیمات صفحه و استایل کامل RTL و مرتب‌سازی سایدبار ---
 st.set_page_config(page_title="دستیار هوشمند الهادی", page_icon="🤖", layout="centered")
