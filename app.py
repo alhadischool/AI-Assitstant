@@ -91,7 +91,7 @@ for msg in st.session_state.messages:
 # --- 5. بارگذاری ابزارها ---
 @st.cache_resource
 def load_tools():
-    embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
+    embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2")
     db = Chroma(persist_directory="./my_database", embedding_function=embeddings)
     
     if not MY_GEMINI_KEY or "PASTE_YOUR" in MY_GEMINI_KEY:
