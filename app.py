@@ -101,7 +101,7 @@ def load_tools():
     llm = ChatGoogleGenerativeAI(
         api_key=MY_GEMINI_KEY, 
         google_api_key=MY_GEMINI_KEY,
-        model="gemini-1.5-flash", 
+        model="gemini-3.6-flash", 
         temperature=0
     )
     return db, llm
