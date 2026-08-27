@@ -107,6 +107,36 @@ if user_question:
             
             hidden_text = "\n\n".join([doc.page_content for doc in found_docs])
             final_instructions = prompt_template.format(context=hidden_text, question=user_question)
+
+            # --- مدیریت هوشمند خطاهای API و محدودیت نرخ (Rate Limit) ---   
+            try:
+                raw_response = llm.invoke(final_instructions)
+                
+                res_content = raw_response.content if hasattr(raw_response, "content") else str(raw_response)
+                if isinstance(res_content, list):
+                    clean_answer = "".join([item["text"] if isinstance(item, dict) and "text" in item else str(item) for item in res_content])
+                else:
+                    clean_answer = str(res_content)
+                
+                render_styled_text(clean_answer)
+                st.session_state.messages.append({"role": "assistant", "content": clean_answer})
+
+            except Exception as e:
+                error_str = str(e)
+                # بررسی اینکه آیا ارور مربوط به سهمیه یا محدودیت زمان (429 / Rate Limit) است
+                if "429" in error_str or "RESOURCE_EXHAUSTED" in error_str or "RateLimit" in error_str:
+                    import re
+                    # استخراج زمان پیشنهادی برای تلاش مجدد از درون متن ارور (مثلاً 23s)
+                    retry_match = re.search(r'retry in ([0-9\.]+)s', error_str)
+                    wait_time = "حدود ۱ دقیقه"
+                    if retry_match:
+                        seconds = float(retry_match.group(1))
+                        wait_time = f"حدود {int(seconds)} ثانیه"
+
+                    st.warning(f"⏳ **سهمیه درخواست‌های هوش مصنوعی موقتاً به پایان رسیده است.**\n\nلطفاً **{wait_time}** دیگر مجدداً سوال خود را بپرسید.")
+                else:
+                    # سایر خطاهای احتمالی
+                    st.error(f"❌ خطایی در دریافت پاسخ از هوش مصنوعی رخ داد:\n\n{error_str}")
             
             raw_response = llm.invoke(final_instructions)
             
