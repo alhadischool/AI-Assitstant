@@ -1,129 +1,57 @@
 import warnings
 import os
-import re
+import streamlit as st
+from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_core.prompts import PromptTemplate
+
+from helpers import apply_rtl_styles, render_styled_text
+from document_loader import load_and_vectorize_docs
+
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 warnings.filterwarnings("ignore")
 
-from langchain_text_splitters import RecursiveCharacterTextSplitter
-import streamlit as st
-from langchain_chroma import Chroma
-from langchain_huggingface import HuggingFaceEmbeddings
-from langchain_google_genai import ChatGoogleGenerativeAI
-from langchain_core.prompts import PromptTemplate
-from langchain_community.document_loaders import DirectoryLoader, TextLoader, Docx2txtLoader, PyPDFLoader
-from langchain_text_splitters import RecursiveCharacterTextSplitter
-from langchain_community.vectorstores import Chroma
-from langchain_huggingface import HuggingFaceEmbeddings
-# ==============================================================================
-# 🔑 PASTE YOUR GEMINI API KEY HERE
-# ==============================================================================
-MY_GEMINI_KEY = st.secrets["GEMINI_API_KEY"]
-# ==============================================================================
-
-# --- ساخت دیتابیس زنده و هوشمند از روی فایل‌ها ---
-@st.cache_resource
-def load_and_vectorize_docs():
-    all_documents = []
-    docs_folder = './docs'
-    
-    if os.path.exists(docs_folder):
-        for root, _, files in os.walk(docs_folder):
-            for file in files:
-                file_path = os.path.join(root, file)
-                ext = file.lower().split('.')[-1]
-                
-                try:
-                    if ext == 'txt':
-                        loader = TextLoader(file_path, encoding='utf-8')
-                        all_documents.extend(loader.load())
-                    elif ext in ['docx', 'doc']:
-                        loader = Docx2txtLoader(file_path)
-                        all_documents.extend(loader.load())
-                    elif ext == 'pdf':
-                        loader = PyPDFLoader(file_path)
-                        all_documents.extend(loader.load())
-                except Exception as e:
-                    st.warning(f"خطا در خواندن فایل {file}: {e}")
-                    
-    # اگر هیچ فایلی پیدا نشد
-    if not all_documents:
-        st.error("هیچ متنی از فایل‌های داخل پوشه docs خوانده نشد!")
-        return None
-
-    # تکه‌تکه کردن متون
-    text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
-    splits = text_splitter.split_documents(all_documents)
-
-    # ساخت دیتابیس در حافظه
-    embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2")
-    vector_store = Chroma.from_documents(documents=splits, embedding=embeddings)
-    
-    return vector_store
-
-# --- 1. تنظیمات صفحه و استایل کامل RTL و مرتب‌سازی سایدبار ---
+# تنظیمات صفحه
 st.set_page_config(page_title="دستیار هوشمند الهادی", page_icon="🤖", layout="centered")
+apply_rtl_styles()
 
-st.markdown("""
-    <link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;700&display=swap" rel="stylesheet">
+# کلید API
+MY_GEMINI_KEY = st.secrets["GEMINI_API_KEY"]
 
-    <style>
-        /* 1. اعمال فونت وزیرمتن فقط به متون (بدون دستکاری آیکون‌های سیستمی) */
-        h1, h2, h3, h4, p, label, .stMarkdown, .stText, 
-        [data-testid="stSidebarUserContent"], 
-        [data-testid="stChatMessageContent"], 
-        .stChatInput textarea {
-            font-family: 'Vazirmatn', sans-serif !important;
-        }
+# لود دیتابیس و مدل هوش مصنوعی
+@st.cache_resource
+def load_llm():
+    if not MY_GEMINI_KEY:
+        st.error("⚠️ کلید API جیمینای در Secrets یافت نشد.")
+        st.stop()
+        
+    return ChatGoogleGenerativeAI(
+        api_key=MY_GEMINI_KEY, 
+        google_api_key=MY_GEMINI_KEY,
+        model="gemini-3.6-flash", 
+        temperature=0
+    )
 
-        /* 2. راست‌چین کردن محتوای صفحه، سایدبار و چت (بدون خراب کردن فیزیک سایدبار) */
-        .block-container, 
-        [data-testid="stSidebarUserContent"],
-        .stChatInput textarea,
-        [data-testid="stChatMessageContent"] {
-            direction: rtl !important;
-            text-align: right !important;
-        }
+db = load_and_vectorize_docs()
+llm = load_llm()
 
-        /* 3. راست‌چین کردن عناوین، متن‌ها و چک‌باکس‌ها */
-        h1, h2, h3, p, .stMarkdown, .stCheckbox {
-            direction: rtl !important;
-            text-align: right !important;
-        }
-
-        /* 4. تنظیم فاصله خطوط متون برای خوانایی بهتر */
-        p, div {
-            line-height: 1.8;
-        }
-    </style>
-""", unsafe_allow_html=True)
-
-# --- 2. تابع تشخیص زبان متن ---
-def render_styled_text(text: str):
-    if re.search(r'[\u0600-\u06FF]', text):
-        st.markdown(f'<div style="direction: rtl; text-align: right;">{text}</div>', unsafe_allow_html=True)
-    else:
-        st.markdown(f'<div style="direction: ltr; text-align: left;">{text}</div>', unsafe_allow_html=True)
-
-# --- 3. بارگذاری هوشمند اسامی فایل‌ها در سایدبار ---
+# سایدبار
 st.sidebar.title("📁 انتخاب منابع جستجو")
 st.sidebar.write("فایل‌هایی که می‌خواهید هوش مصنوعی در آن‌ها جستجو کند را انتخاب کنید:")
 
-# دریافت لیست تمام فایل‌های موجود در پوشه docs
 docs_folder = "docs"
 available_files = []
 if os.path.exists(docs_folder):
-    available_files = [f for f in os.listdir(docs_folder) if f.endswith(('.txt', '.pdf', '.docx'))]
+    available_files = [f for f in os.listdir(docs_folder) if f.lower().endswith(('.txt', '.pdf', '.docx', '.doc'))]
 
 selected_files = []
 if available_files:
-    # ساخت یک چک‌باکس به ازای هر فایل
     for file_name in available_files:
         if st.sidebar.checkbox(file_name, value=True, key=file_name):
             selected_files.append(file_name)
 else:
     st.sidebar.warning("هیچ فایلی در پوشه docs یافت نشد!")
 
-# --- 4. عنوان اصلی و تاریخچه چت ---
+# چت روم
 st.title("دستیار هوشمند الهادی 🤖")
 st.write("سوال خود را بپرسید! من پاسخ‌ها را با تحلیل اسناد انتخاب‌شده پیدا می‌کنم.")
 
@@ -134,27 +62,6 @@ for msg in st.session_state.messages:
     with st.chat_message(msg["role"]):
         render_styled_text(msg["content"])
 
-# --- 5. بارگذاری ابزارها ---
-@st.cache_resource
-def load_tools():
-    embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2")
-    db = Chroma(persist_directory="./my_database", embedding_function=embeddings)
-    
-    if not MY_GEMINI_KEY or "PASTE_YOUR" in MY_GEMINI_KEY:
-        st.error("⚠️ لطفاً کلید API جیمینای خود را در فایل app.py قرار دهید.")
-        st.stop()
-        
-    llm = ChatGoogleGenerativeAI(
-        api_key=MY_GEMINI_KEY, 
-        google_api_key=MY_GEMINI_KEY,
-        model="gemini-3.6-flash", 
-        temperature=0
-    )
-    return db, llm
-
-db, llm = load_tools()
-
-# --- 6. پرامپت سیستم ---
 prompt_template = PromptTemplate.from_template("""
 شما یک دستیار هوشمند و دقیق برای شرکت هستید.
 
@@ -172,12 +79,15 @@ prompt_template = PromptTemplate.from_template("""
 پاسخ:
 """)
 
-# --- 7. دریافت سوال و فیلتر بر اساس فایل‌های انتخاب‌شده ---
 user_question = st.chat_input("سوال خود را اینجا بنویسید...")
 
 if user_question:
     if not selected_files:
         st.warning("لطفاً حداقل یک فایل را از سایدبار انتخاب کنید.")
+        st.stop()
+
+    if db is None:
+        st.error("دیتابیس خالی است یا فایلی خوانده نشده است.")
         st.stop()
 
     st.session_state.messages.append({"role": "user", "content": user_question})
@@ -187,38 +97,29 @@ if user_question:
     with st.chat_message("assistant"):
         with st.spinner("در حال جستجو در فایل‌های انتخاب‌شده..."):
             
-            # ایجاد فیلتر بر اساس نام فایل‌های انتخاب‌شده در سایدبار
             if len(selected_files) == 1:
                 filter_dict = {"source": selected_files[0]}
             else:
                 filter_dict = {"$or": [{"source": f} for f in selected_files]}
 
-            # دریافت اسناد با اعمال فیلتر سایدبار
             retriever = db.as_retriever(search_kwargs={"k": 20, "filter": filter_dict})
             found_docs = retriever.invoke(user_question)
 
-            # --- بخش عیب‌یابی دیتابیس (با فاصله‌گذاری استاندارد) ---
-        with st.expander("🔍 رادیولوژی دیتابیس (چه چیزی پیدا شد؟)"):
-            st.write(f"تعداد تکه‌های پیدا شده: {len(found_docs)}")
-            for i, doc in enumerate(found_docs):
-                st.info(f"تکه {i+1}: {doc.page_content}")
+            with st.expander("🔍 رادیولوژی دیتابیس (چه چیزی پیدا شد؟)"):
+                st.write(f"تعداد تکه‌های پیدا شده: {len(found_docs)}")
+                for i, doc in enumerate(found_docs):
+                    st.info(f"تکه {i+1} (از فایل {doc.metadata.get('source', 'نامشخص')}):\n{doc.page_content}")
             
             hidden_text = "\n\n".join([doc.page_content for doc in found_docs])
             final_instructions = prompt_template.format(context=hidden_text, question=user_question)
             
             raw_response = llm.invoke(final_instructions)
             
-            if hasattr(raw_response, "content"):
-                res_content = raw_response.content
-                if isinstance(res_content, list):
-                    clean_answer = "".join([
-                        item["text"] if isinstance(item, dict) and "text" in item else str(item) 
-                        for item in res_content
-                    ])
-                else:
-                    clean_answer = str(res_content)
+            res_content = raw_response.content if hasattr(raw_response, "content") else str(raw_response)
+            if isinstance(res_content, list):
+                clean_answer = "".join([item["text"] if isinstance(item, dict) and "text" in item else str(item) for item in res_content])
             else:
-                clean_answer = str(raw_response)
+                clean_answer = str(res_content)
             
             render_styled_text(clean_answer)
             st.session_state.messages.append({"role": "assistant", "content": clean_answer})
