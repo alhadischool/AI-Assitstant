@@ -151,10 +151,10 @@ if user_question:
             retriever = db.as_retriever(search_kwargs={"k": 20, "filter": filter_dict})
             found_docs = retriever.invoke(user_question)
 
-            # این بخش را فقط برای تست اضافه کنید
-            with st.expander("🔍 رادیولوژی دیتابیس (چه چیزی پیدا شد؟)"):
-                st.write(f"تعداد تکه‌های پیدا شده: {len(found_docs)}")
-                for i, doc in enumerate(found_docs):
+            # --- بخش عیب‌یابی دیتابیس (با فاصله‌گذاری استاندارد) ---
+        with st.expander("🔍 رادیولوژی دیتابیس (چه چیزی پیدا شد؟)"):
+            st.write(f"تعداد تکه‌های پیدا شده: {len(found_docs)}")
+            for i, doc in enumerate(found_docs):
                 st.info(f"تکه {i+1}: {doc.page_content}")
             
             hidden_text = "\n\n".join([doc.page_content for doc in found_docs])
