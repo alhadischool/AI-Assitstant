@@ -1,12 +1,13 @@
 import warnings
 import os
+import re
 import streamlit as st
+from groq import Groq
 from langchain_groq import ChatGroq
 from langchain_core.prompts import PromptTemplate
 
 from helpers import apply_rtl_styles, render_styled_text
 from document_loader import load_and_vectorize_docs
-from groq import Groq
 
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 warnings.filterwarnings("ignore")
@@ -15,10 +16,9 @@ warnings.filterwarnings("ignore")
 st.set_page_config(page_title="دستیار هوشمند الهادی", page_icon="🤖", layout="centered")
 apply_rtl_styles()
 
-# دریافت کلید API گراک
 MY_GROQ_KEY = st.secrets.get("GROQ_API_KEY", "")
 
-# لود دیتابیس و مدل Groq
+# لود هوشمند مدل‌های فعال Groq
 @st.cache_resource
 def load_llm():
     if not MY_GROQ_KEY:
@@ -26,11 +26,9 @@ def load_llm():
         st.stop()
         
     try:
-        # دریافت آنلاین و زنده مدل‌های فعال اکانت شما
         client = Groq(api_key=MY_GROQ_KEY)
         active_models = [m.id for m in client.models.list().data]
         
-        # انتخاب اولین مدل معتبر از لیست فعال‌ها
         chosen_model = active_models[0]
         for m in active_models:
             if "llama" in m.lower() or "qwen" in m.lower():
@@ -80,12 +78,12 @@ for msg in st.session_state.messages:
         render_styled_text(msg["content"])
 
 prompt_template = PromptTemplate.from_template("""
-شما یک دستیار هوشمند و دقیق برای شرکت هستید.
+شما یک دستیار هوشمند، دقیق و مستقیم برای شرکت هستید.
 
 دستورالعمل‌ها:
 1. زبان پاسخگویی: دقیقاً به همان زبانی که کاربر سوال پرسیده پاسخ دهید.
 2. منبع اصلی: از اطلاعات موجود در متن زیر برای پاسخ به سوال استفاده کنید.
-3. تحلیل و شمارش: شما مجاز هستید موارد را بشمارید، لیست‌ها را خلاصه کنید یا بر اساس متن تحلیل انجام دهید.
+3. خروجی مستقیم: مستقیماً پاسخ نهایی را بنویسید. به هیچ عنوان روند فکر کردن (Thinking process)، پیش‌فرضیات یا تحلیل‌های اولیه خود را در خروجی نیاورید.
 4. عدم اشاره به ساختار: هرگز از جملاتی مثل "طبق متن داده شده" یا "بر اساس اسناد" استفاده نکنید.
 
 متن اسناد:
@@ -93,7 +91,7 @@ prompt_template = PromptTemplate.from_template("""
 
 سوال کاربر: {question}
 
-پاسخ:
+پاسخ نهایی:
 """)
 
 user_question = st.chat_input("سوال خود را اینجا بنویسید...")
@@ -112,21 +110,16 @@ if user_question:
         render_styled_text(user_question)
 
     with st.chat_message("assistant"):
-        with st.spinner("در حال جستجو در فایل‌های انتخاب‌شده..."):
+        with st.spinner("در حال جستجو و تحلیل اسناد..."):
             
             if len(selected_files) == 1:
                 filter_dict = {"source": selected_files[0]}
             else:
                 filter_dict = {"$or": [{"source": f} for f in selected_files]}
 
-            # جستجو با 5 تکه متنی برای دقت عالی
-            retriever = db.as_retriever(search_kwargs={"k": 5, "filter": filter_dict})
+            # بازگرداندن جستجو به ۲۰ تکه برای پوشش کامل تمام اسناد
+            retriever = db.as_retriever(search_kwargs={"k": 20, "filter": filter_dict})
             found_docs = retriever.invoke(user_question)
-
-            with st.expander("🔍 رادیولوژی دیتابیس (چه چیزی پیدا شد؟)"):
-                st.write(f"تعداد تکه‌های پیدا شده: {len(found_docs)}")
-                for i, doc in enumerate(found_docs):
-                    st.info(f"تکه {i+1} (از فایل {doc.metadata.get('source', 'نامشخص')}):\n{doc.page_content}")
             
             hidden_text = "\n\n".join([doc.page_content for doc in found_docs])
             final_instructions = prompt_template.format(context=hidden_text, question=user_question)
@@ -140,8 +133,12 @@ if user_question:
                 else:
                     clean_answer = str(res_content)
                 
+                # فیلتر اختصاصی جهت حذف هرگونه متن فکر کردن (Thinking Process / <think>)
+                clean_answer = re.sub(r'(?i)here\'s a thinking process:[\s\S]*?(?=\n\n|\n[آ-یA-Z]|$)', '', clean_answer)
+                clean_answer = re.sub(r'<think>[\s\S]*?</think>', '', clean_answer).strip()
+                
                 render_styled_text(clean_answer)
                 st.session_state.messages.append({"role": "assistant", "content": clean_answer})
             
             except Exception as e:
-                st.error(f"❌ خطایی در فراخوانی سرویس Groq رخ داد:\n\n{str(e)}")
+                st.error(f"❌ خطایی در دریافت پاسخ رخ داد:\n\n{str(e)}")
