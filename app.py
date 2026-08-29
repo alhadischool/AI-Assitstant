@@ -24,11 +24,28 @@ def load_llm():
         st.error("⚠️ کلید API گراک (GROQ_API_KEY) در Secrets یافت نشد.")
         st.stop()
         
-    return ChatGroq(
-        api_key=MY_GROQ_KEY,
-        model_name="llama-3.1-8b-instant",
-        temperature=0
-    )
+    try:
+        # دریافت آنلاین و زنده مدل‌های فعال اکانت شما
+        client = Groq(api_key=MY_GROQ_KEY)
+        active_models = [m.id for m in client.models.list().data]
+        
+        # انتخاب اولین مدل معتبر از لیست فعال‌ها
+        chosen_model = active_models[0]
+        for m in active_models:
+            if "llama" in m.lower() or "qwen" in m.lower():
+                chosen_model = m
+                break
+                
+        st.sidebar.caption(f"🤖 مدل فعال: `{chosen_model}`")
+        
+        return ChatGroq(
+            api_key=MY_GROQ_KEY,
+            model_name=chosen_model,
+            temperature=0
+        )
+    except Exception as e:
+        st.error(f"خطا در دریافت لیست مدل‌های Groq: {e}")
+        st.stop()
 
 db = load_and_vectorize_docs()
 llm = load_llm()
