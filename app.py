@@ -140,18 +140,25 @@ if user_question:
             try:
                 raw_response = llm.invoke(final_instructions)
                 
+                # استخراج متن پاسخ
                 res_content = raw_response.content if hasattr(raw_response, "content") else str(raw_response)
                 if isinstance(res_content, list):
                     clean_answer = "".join([item["text"] if isinstance(item, dict) and "text" in item else str(item) for item in res_content])
                 else:
                     clean_answer = str(res_content)
                 
-                # فیلتر اختصاصی جهت حذف هرگونه متن فکر کردن (Thinking Process / <think>)
-                clean_answer = re.sub(r'(?i)here\'s a thinking process:[\s\S]*?(?=\n\n|\n[آ-یA-Z]|$)', '', clean_answer)
-                clean_answer = re.sub(r'<think>[\s\S]*?</think>', '', clean_answer).strip()
+                # --- پاک‌سازی قطعی متن‌های تحلیل اولیه و انگلیسی ---
+                # ۱. حذف کامل تگ‌ها و تحلیل‌های فکری انگلیسی
+                clean_answer = re.sub(r'(?i)(here\'s a thinking process|analyze user input|constraint \d+|source text analysis|draft)[\s\S]*?(?=\n[آ-ی1-9]|\n\n|$)', '', clean_answer)
+                clean_answer = re.sub(r'<think>[\s\S]*?</think>', '', clean_answer)
                 
+                # ۲. برش مستقیم از شروع متن اصلی یا لیست فارسی
+                match = re.search(r'([آ-ی][\s\S]*|[0-9]\.[\s\S]*)', clean_answer)
+                if match:
+                    clean_answer = match.group(0).strip()
+
                 render_styled_text(clean_answer)
                 st.session_state.messages.append({"role": "assistant", "content": clean_answer})
-            
+                
             except Exception as e:
                 st.error(f"❌ خطایی در دریافت پاسخ رخ داد:\n\n{str(e)}")
