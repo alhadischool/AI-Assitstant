@@ -26,7 +26,7 @@ def load_llm():
         
     return ChatGroq(
         api_key=MY_GROQ_KEY,
-        model_name="llama-3.3-70b-versatile", # 👈 قوی‌ترین مدل رایگان و چندزبانه
+        model_name="llama3-70b-8192",
         temperature=0
     )
 
