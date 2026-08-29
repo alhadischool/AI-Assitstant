@@ -10,3 +10,5 @@ docx2txt
 sentence-transformers
 torch
 torchvision
+langchain-groq
+groq
