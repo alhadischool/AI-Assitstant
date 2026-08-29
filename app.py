@@ -27,13 +27,26 @@ def load_llm():
         
     try:
         client = Groq(api_key=MY_GROQ_KEY)
-        active_models = [m.id for m in client.models.list().data]
+        all_models = [m.id for m in client.models.list().data]
         
-        chosen_model = active_models[0]
-        for m in active_models:
-            if "llama" in m.lower() or "qwen" in m.lower():
-                chosen_model = m
+        # ۱. فیلتر کردن مدل‌های غیرچت (مثل گارد، صوتی و تصویر)
+        chat_models = [
+            m for m in all_models 
+            if not any(bad in m.lower() for bad in ["guard", "whisper", "vision", "audio", "embed"])
+        ]
+        
+        # ۲. انتخاب اولویت‌دار از میان مدل‌های چت متنی فعال
+        chosen_model = None
+        for key in ["3.3", "70b", "3.1", "qwen", "mixtral", "8b"]:
+            for m in chat_models:
+                if key in m.lower():
+                    chosen_model = m
+                    break
+            if chosen_model:
                 break
+                
+        if not chosen_model:
+            chosen_model = chat_models[0] if chat_models else all_models[0]
                 
         st.sidebar.caption(f"🤖 مدل فعال: `{chosen_model}`")
         
