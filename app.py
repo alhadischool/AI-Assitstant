@@ -6,6 +6,7 @@ from langchain_core.prompts import PromptTemplate
 
 from helpers import apply_rtl_styles, render_styled_text
 from document_loader import load_and_vectorize_docs
+from groq import Groq
 
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 warnings.filterwarnings("ignore")
