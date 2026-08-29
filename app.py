@@ -117,8 +117,8 @@ if user_question:
             else:
                 filter_dict = {"$or": [{"source": f} for f in selected_files]}
 
-            # بازگرداندن جستجو به ۲۰ تکه برای پوشش کامل تمام اسناد
-            retriever = db.as_retriever(search_kwargs={"k": 20, "filter": filter_dict})
+            # بازگرداندن جستجو به ۱۰ تکه برای پوشش کامل تمام اسناد
+            retriever = db.as_retriever(search_kwargs={"k": 10, "filter": filter_dict})
             found_docs = retriever.invoke(user_question)
             
             hidden_text = "\n\n".join([doc.page_content for doc in found_docs])
